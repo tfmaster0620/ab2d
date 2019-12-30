@@ -1,6 +1,4 @@
-# Getting Started with AB2B in Sandbox
-
-### A beginner's guide to learning how to use the AB2B API
+# AB2D Sandbox
 
 This site is a developer's guide on how to use the AB2D API to bulk search select Part A
 and Part B claim data by Medicare Part D plan (PDP) sponsors. The AB2D API is a RESTful based 
@@ -18,7 +16,7 @@ Data will be limited to a subset of explanation of benefit data records by the f
 - Only data specified by the Secretary of Health and Human Services within the explanation of benefit 
 object (not all data in the explanation of benefit object is included in the returned object)
 
-###Data Use and Limitations
+### Data Use and Limitations
 This data may be used for:
 - Optimizing therapeutic outcomes through improved medication use
 - Improving care coordination so as to prevent adverse healthcare outcomes, such as
@@ -39,7 +37,7 @@ personal health information.
 To get access to the sandbox environment ...
 More detailed information is available <a href="API.md">here</a>.
 
-###Legislation
+### Legislation
 <a href=https://www.congress.gov/bill/115th-congress/house-bill/1892/text>Bipartisan Budget Act of 2018</a><br>
 <a href="https://www.federalregister.gov/documents/2019/04/16/2019-06822/medicare-and-medicaid-programs-policy-and-technical-changes-to-the-medicare-advantage-medicare">
 Final Rule</a>

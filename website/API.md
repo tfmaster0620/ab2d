@@ -1,4 +1,4 @@
-# Getting Started with AB2B in Sandbox
+# Getting Started with AB2D in Sandbox
 
 #### Getting started
 
