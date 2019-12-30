@@ -30,7 +30,7 @@ downloaded. The contents of the file will be in ndjson
 - A job may be cancelled at any point during its processing:<br>
 ```DELETE /api/v1/fhir/Job/{jobUuid}/$status```
 
-###Authentication and Authorization
+### Authentication and Authorization
 The API uses the JSON Web Tokens (JWT) to authorize use of the endpoints. The
 token should be sent using the "Authorization" header field with the value specified
 as "Bearer xxxxx" where xxxxx is the value of the JWT. The <a href="swagger-ui.html">Swagger page</a>
