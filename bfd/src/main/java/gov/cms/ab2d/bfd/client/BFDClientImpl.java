@@ -10,8 +10,7 @@ import org.hl7.fhir.dstu3.model.ExplanationOfBenefit;
 import org.hl7.fhir.instance.model.api.IBaseResource;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.PropertySource;
-import org.springframework.retry.annotation.Backoff;
-import org.springframework.retry.annotation.Retryable;
+import org.springframework.retry.support.RetryTemplate;
 import org.springframework.stereotype.Component;
 
 /**
@@ -28,8 +27,11 @@ public class BFDClientImpl implements BFDClient {
 
     private IGenericClient client;
 
-    public BFDClientImpl(IGenericClient bfdFhirRestClient) {
+    private RetryTemplate retryTemplate;
+
+    public BFDClientImpl(IGenericClient bfdFhirRestClient, RetryTemplate retryTemplate) {
         this.client = bfdFhirRestClient;
+        this.retryTemplate = retryTemplate;
     }
 
 
@@ -56,25 +58,41 @@ public class BFDClientImpl implements BFDClient {
      * @throws ResourceNotFoundException when the requested patient does not exist
      */
     @Override
-    @Retryable(
-            maxAttemptsExpression = "${bfd.retry.maxAttempts:3}",
-            backoff = @Backoff(delayExpression = "${bfd.retry.backoffDelay:250}", multiplier = 2),
-            exclude = { ResourceNotFoundException.class }
-    )
     public Bundle requestEOBFromServer(String patientID) {
-        return
-                fetchBundle(ExplanationOfBenefit.class,
-                        ExplanationOfBenefit.PATIENT.hasId(patientID));
+        Bundle bundle = retryTemplate.execute(ctx -> {
+                log.info("Get EOB - FIRST Page - Retry Count : {}", ctx.getRetryCount());
+                if (ctx.getRetryCount() > 0) {
+                    log.error("###########################################");
+                    log.info("Retrying call for patient id : {}", patientID);
+                    log.error("###########################################");
+                }
+                return getEOB(patientID);
+            });
+        return bundle;
+    }
+
+    private Bundle getEOB(String patientID) {
+        return fetchBundle(ExplanationOfBenefit.class,
+                ExplanationOfBenefit.PATIENT.hasId(patientID));
     }
 
 
     @Override
-    @Retryable(
-            maxAttemptsExpression = "${bfd.retry.maxAttempts:3}",
-            backoff = @Backoff(delayExpression = "${bfd.retry.backoffDelay:250}", multiplier = 2),
-            exclude = { ResourceNotFoundException.class }
-    )
     public Bundle requestNextBundleFromServer(Bundle bundle) throws ResourceNotFoundException {
+        Bundle nextBundle = retryTemplate.execute(ctx -> {
+                log.info("Fetch - NEXT Page - Retry Count : {}", ctx.getRetryCount());
+                if (ctx.getRetryCount() > 0) {
+                    log.error("###############################################");
+                    log.info("Retrying call for bundle id : {}", bundle.getId());
+                    log.error("###############################################");
+                }
+                return getNext(bundle);
+            });
+
+        return nextBundle;
+    }
+
+    private Bundle getNext(Bundle bundle) {
         return client
                 .loadPage()
                 .next(bundle)
