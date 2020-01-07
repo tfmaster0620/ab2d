@@ -1,10 +1,13 @@
 package gov.cms.ab2d.worker.adapter.bluebutton;
 
 import ca.uhn.fhir.context.FhirContext;
+import ca.uhn.fhir.rest.server.exceptions.ResourceNotFoundException;
 import gov.cms.ab2d.bfd.client.BFDClient;
 import gov.cms.ab2d.common.util.FHIRUtil;
 import gov.cms.ab2d.filter.ExplanationOfBenefitsTrimmer;
 import gov.cms.ab2d.worker.service.FileService;
+import io.github.resilience4j.retry.Retry;
+import io.github.resilience4j.retry.RetryRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.exception.ExceptionUtils;
@@ -27,6 +30,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.Future;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static gov.cms.ab2d.common.util.Constants.FILE_LOG;
@@ -50,6 +54,9 @@ public class PatientClaimsProcessorImpl implements PatientClaimsProcessor {
 
     @Value("${file.try.lock.timeout}")
     private int tryLockTimeout;
+
+    @Autowired
+    private RetryRegistry retryRegistry;
 
     @Async("bfd-client")
     public Future<Integer> process(String patientId, ReentrantLock lock, Path outputFile, Path errorFile) {
@@ -75,14 +82,12 @@ public class PatientClaimsProcessorImpl implements PatientClaimsProcessor {
             }
 
             appendToFile(outputFile, byteArrayOutputStream, lock);
+        } catch (ResourceNotFoundException e) {
+            ++errorCount;
+            appendToErrorFile(lock, errorFile, e);
         } catch (Exception e) {
             ++errorCount;
-            try {
-                handleException(errorFile, e, lock);
-            } catch (IOException e1) {
-                //should not happen - original exception will be thrown
-                log.error("error during exception handling to write error record");
-            }
+            appendToErrorFile(lock, errorFile, e);
             throw new RuntimeException(e);
         }
 
@@ -93,6 +98,15 @@ public class PatientClaimsProcessorImpl implements PatientClaimsProcessor {
         }
 
         return new AsyncResult<>(errorCount);
+    }
+
+    private void appendToErrorFile(ReentrantLock lock, Path errorFile, Exception e) {
+        try {
+            handleException(errorFile, e, lock);
+        } catch (IOException e1) {
+            //should not happen - original exception will be thrown
+            log.error("error during exception handling to write error record");
+        }
     }
 
     private void handleException(Path errorFile, Exception e, ReentrantLock lock) throws IOException {
@@ -141,13 +155,17 @@ public class PatientClaimsProcessorImpl implements PatientClaimsProcessor {
 
     private List<Resource> getEobBundleResources(String patientId) {
 
-        Bundle eobBundle = bfdClient.requestEOBFromServer(patientId);
+        final Retry retryFirstPage = retryRegistry.retry("bfdPatientEobBundleGetFirstPage");
+        final Function<String, Bundle> decoratedFirstPage = Retry.decorateFunction(retryFirstPage, (String s) -> bfdClient.requestEOBFromServer(s));
+        Bundle eobBundle = decoratedFirstPage.apply(patientId);
 
         final List<BundleEntryComponent> entries = eobBundle.getEntry();
         final List<Resource> resources = extractResources(entries);
 
+        final Retry retryNextPage = retryRegistry.retry("bfdPatientEobBundleGetNextPage");
+        final Function<Bundle, Bundle> decoratedNextPage = Retry.decorateFunction(retryNextPage, (Bundle s) -> bfdClient.requestNextBundleFromServer(s));
         while (eobBundle.getLink(Bundle.LINK_NEXT) != null) {
-            eobBundle = bfdClient.requestNextBundleFromServer(eobBundle);
+            eobBundle = decoratedNextPage.apply(eobBundle);
             final List<BundleEntryComponent> nextEntries = eobBundle.getEntry();
             resources.addAll(extractResources(nextEntries));
         }
