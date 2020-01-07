@@ -4,6 +4,7 @@ import ca.uhn.fhir.rest.client.api.IGenericClient;
 import ca.uhn.fhir.rest.gclient.ICriterion;
 import ca.uhn.fhir.rest.gclient.ReferenceClientParam;
 import ca.uhn.fhir.rest.server.exceptions.ResourceNotFoundException;
+import io.github.resilience4j.retry.annotation.Retry;
 import lombok.extern.slf4j.Slf4j;
 import org.hl7.fhir.dstu3.model.Bundle;
 import org.hl7.fhir.dstu3.model.ExplanationOfBenefit;
@@ -54,6 +55,7 @@ public class BFDClientImpl implements BFDClient {
      * @throws ResourceNotFoundException when the requested patient does not exist
      */
     @Override
+    @Retry(name = "bfdPatientEobBundleGetFirstPage")
     public Bundle requestEOBFromServer(String patientID) {
         return
                 fetchBundle(ExplanationOfBenefit.class,
@@ -62,6 +64,7 @@ public class BFDClientImpl implements BFDClient {
 
 
     @Override
+    @Retry(name = "bfdPatientEobBundleGetNextPage")
     public Bundle requestNextBundleFromServer(Bundle bundle) throws ResourceNotFoundException {
         return client
                 .loadPage()
