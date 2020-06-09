@@ -1,6 +1,8 @@
 package gov.cms.ab2d.worker.processor;
 
 import ca.uhn.fhir.context.FhirContext;
+import com.newrelic.api.agent.NewRelic;
+import com.newrelic.api.agent.Segment;
 import com.newrelic.api.agent.Token;
 import com.newrelic.api.agent.Trace;
 import gov.cms.ab2d.bfd.client.BFDClient;
@@ -70,8 +72,15 @@ public class PatientClaimsProcessorImpl implements PatientClaimsProcessor {
             for (var resource : resources) {
                 ++resourceCount;
                 try {
+                    final Segment jsonSegment = NewRelic.getAgent().getTransaction().startSegment("Parsing JSON for  " + request.getPatientDTO().getPatientId());
+                    jsonSegment.setMetricName("ParsingJson");
                     payload = jsonParser.encodeResourceToString(resource) + System.lineSeparator();
+                    jsonSegment.end();
+
+                    final Segment addDataSegment = NewRelic.getAgent().getTransaction().startSegment("Adding JSON for  " + request.getPatientDTO().getPatientId());
+                    addDataSegment.setMetricName("AddingData");
                     request.getHelper().addData(payload.getBytes(StandardCharsets.UTF_8));
+                    addDataSegment.end();
                 } catch (Exception e) {
                     log.warn("Encountered exception while processing job resources: {}", e.getMessage());
                     handleException(request.getHelper(), payload, e);
@@ -85,13 +94,15 @@ public class PatientClaimsProcessorImpl implements PatientClaimsProcessor {
                 log.error("error during exception handling to write error record");
             }
 
-            token.expire();
+            //token.expire();
+
             return AsyncResult.forExecutionException(e);
         }
 
         log.debug("finished writing [{}] resources", resourceCount);
 
-        token.expire();
+        //token.expire();
+
         return new AsyncResult<>(null);
     }
 
@@ -130,6 +141,8 @@ public class PatientClaimsProcessorImpl implements PatientClaimsProcessor {
             throw ex;
         }
 
+        final Segment bundleSegment = NewRelic.getAgent().getTransaction().startSegment("Extracting bundle  " + request.getPatientDTO().getPatientId());
+        bundleSegment.setMetricName("Bundle");
         final List<BundleEntryComponent> entries = eobBundle.getEntry();
         final List<Resource> resources = extractResources(entries, patient.getDateRangesUnderContract(), attTime);
 
@@ -140,6 +153,9 @@ public class PatientClaimsProcessorImpl implements PatientClaimsProcessor {
         }
 
         log.debug("Bundle - Total: {} - Entries: {} ", eobBundle.getTotal(), entries.size());
+
+        bundleSegment.end();
+
         return resources;
     }
 

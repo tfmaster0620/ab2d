@@ -6,6 +6,8 @@ import ca.uhn.fhir.rest.gclient.TokenClientParam;
 import ca.uhn.fhir.rest.param.DateRangeParam;
 import ca.uhn.fhir.rest.server.exceptions.InvalidRequestException;
 import ca.uhn.fhir.rest.server.exceptions.ResourceNotFoundException;
+import com.newrelic.api.agent.NewRelic;
+import com.newrelic.api.agent.Segment;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.codec.DecoderException;
 import org.apache.commons.codec.binary.Hex;
@@ -123,7 +125,11 @@ public class BFDClientImpl implements BFDClient {
             Date d = Date.from(sinceTime.toInstant());
             updatedSince = new DateRangeParam(d, null);
         }
-        return client.search()
+
+        final Segment bfdSegment = NewRelic.getAgent().getTransaction().startSegment("BFD Call for patient with patient ID " + patientID +
+                " using since " + sinceTime);
+        bfdSegment.setMetricName("RequestEOB");
+        Bundle bundle = client.search()
                 .forResource(ExplanationOfBenefit.class)
                 .where(ExplanationOfBenefit.PATIENT.hasId(patientID))
                 .and(excludeSAMHSA)
@@ -132,6 +138,10 @@ public class BFDClientImpl implements BFDClient {
                 .returnBundle(Bundle.class)
                 .encodedJson()
                 .execute();
+
+        bfdSegment.end();
+
+        return bundle;
     }
 
     /**
@@ -230,13 +240,21 @@ public class BFDClientImpl implements BFDClient {
                 .exactly()
                 .systemAndIdentifier(monthParameter, contractNumber);
 
-        return client.search()
+        final Segment bfdSegment = NewRelic.getAgent().getTransaction().startSegment("BFD Call for part D enrollees contract " + contractNumber +
+                " month " + month);
+        bfdSegment.setMetricName("RequestPartDEnrollee");
+
+        Bundle bundle = client.search()
                 .forResource(Patient.class)
                 .where(theCriterion)
                 .count(contractToBenePageSize)
                 .returnBundle(Bundle.class)
                 .encodedJson()
                 .execute();
+
+        bfdSegment.end();
+
+        return bundle;
     }
 
 

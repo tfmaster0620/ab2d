@@ -192,8 +192,6 @@ public class ContractProcessorImpl implements ContractProcessor {
      * @return a Future<Void>
      */
     private Future<Void> processPatient(PatientDTO patient, ContractData contractData, StreamHelper helper) {
-        final Token token = NewRelic.getAgent().getTransaction().getToken();
-
         // Using a ThreadLocal to communicate contract number to RoundRobinBlockingQueue
         // could be viewed as a hack by many; but on the other hand it saves us from writing
         // tons of extra code.
@@ -202,6 +200,7 @@ public class ContractProcessorImpl implements ContractProcessor {
         try {
             var attestedOn = contractData.getContract().getAttestedOn();
             var sinceTime = contractData.getSinceTime();
+            final Token token = NewRelic.getAgent().getTransaction().getToken();
             var patientClaimsRequest = new PatientClaimsRequest(patient, helper, attestedOn, sinceTime,
                     contractData.getUserId(), jobUuid,
                     contractData.getContract() != null ? contractData.getContract().getContractNumber() : null, token);
